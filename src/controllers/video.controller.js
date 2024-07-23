@@ -137,7 +137,35 @@ const getVideoById = asyncHandler(async (req, res) => {
 const updateVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
   //TODO: update video details like title, description, thumbnail
-  const { title, description, thumbnail } = req.body;
+  const { title, description } = req.body;
+
+  if (!title && !description) {
+    throw new ApiError(400, "Title and Description are required");
+  }
+
+  const thumbnailLocalPath = req.file?.path;
+  if (!thumbnailLocalPath) {
+    throw new ApiError(400, "Thumbnail Required");
+  }
+
+  const thumbnail = await uploadOnCloudinary(thumbnailLocalPath);
+  if (!thumbnail) {
+    new ApiError(400, "Error While uploading");
+  }
+
+  const video = await Video.findByIdAndUpdate(
+    new mongoose.Types.ObjectId(videoId),
+    {
+      $set: {
+        title: title,
+        description: description,
+        thumbnail: thumbnail?.url,
+      },
+    },
+    { new: true }
+  );
+
+  res.status(200).json(200, video, "Video Details updated successfully");
 });
 
 const deleteVideo = asyncHandler(async (req, res) => {
