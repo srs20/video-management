@@ -125,8 +125,10 @@ const getVideoById = asyncHandler(async (req, res) => {
     },
   ]);
 
-  if (!video) {
-    throw new ApiError(400, "Something Went Wrong");
+  console.log(video);
+
+  if (video.length === 0) {
+    throw new ApiError(400, "Video Not Found");
   }
 
   return res
@@ -171,10 +173,122 @@ const updateVideo = asyncHandler(async (req, res) => {
 const deleteVideo = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
   //TODO: delete video
+
+  const video = await Video.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(videoId),
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              fullname: 1,
+              email: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        owner: {
+          $first: "$owner",
+        },
+      },
+    },
+  ]);
+
+  if (video[0].owner._id.toString() !== req.user?._id.toString()) {
+    throw new ApiError(401, "You are not the owner of the video");
+  }
+
+  const deletedVideo = await Video.findByIdAndDelete(
+    new mongoose.Types.ObjectId(videoId)
+  );
+
+  if (!deletedVideo) {
+    throw new ApiError(401, "Something Went Wrong");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, deletedVideo, "Video Deleted Successfully"));
 });
 
 const togglePublishStatus = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
+
+  const video = await Video.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(videoId),
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "owner",
+        foreignField: "_id",
+        as: "owner",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              fullname: 1,
+              email: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        owner: {
+          $first: "$owner",
+        },
+      },
+    },
+  ]);
+
+  if (video.length === 0) {
+    throw new ApiError(400, "Video Not Found");
+  }
+
+  if (video[0].owner._id.toString() !== req.user?._id.toString()) {
+    throw new ApiError(401, "You are not the owner of the video");
+  }
+
+  const updatedVideo = await Video.findByIdAndUpdate(
+    new mongoose.Types.ObjectId(videoId),
+    {
+      $set: {
+        isPublished: !video[0]?.isPublished,
+      },
+    },
+    { new: true }
+  );
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        updatedVideo,
+        `${
+          updatedVideo.isPublished
+            ? "Video is published"
+            : "Video is unpublished"
+        }`
+      )
+    );
 });
 
 export {
